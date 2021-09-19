@@ -77,17 +77,20 @@ int main(int argc, char **argv)
   printf("Please enter command: ");
   fgets(buf, BUFSIZE, stdin);
 
-  //all commmand implementations here:
+  //!!!
+  //ALL COMMAND IMPLEMENTATIONS HERE
+  //!!!
 
   //PUT
   if (strcmp(buf, "put\n") == 0)
   {
-    strcpy(commandBuffer, "put");
+    strcpy(commandBuffer, "put"); //to send in a message for server to know action
 
     printf("Which file would you like to put on the server?\n");
     fgets(filename, FILENAMESIZE, stdin);
     filename[strcspn(filename, "\n")] = 0;
 
+    //opening and reading file action
     transmitFile = fopen(filename, "r");
     if (!transmitFile)
     {
@@ -95,16 +98,20 @@ int main(int argc, char **argv)
       return;
     }
 
-    fileSize = fread(fileBuffer, MAXFILESIZE, 1, transmitFile);
+    // fseek(transmitFile, 0L, SEEK_END);
+    // fileSize = ftell(transmitFile);
+    // printf("File size: %d\n", fileSize);
+    fread(fileBuffer, MAXFILESIZE, 1, transmitFile);
+
+    //sending messages to server
     serverlen = sizeof(serveraddr);
-
-    sendto(sockfd, commandBuffer, 10, 0, &serveraddr, serverlen); //first send one message of which command
-                                                                  //second message is sending filename information to server so it can create file
-
+    sendto(sockfd, commandBuffer, 10, 0, &serveraddr, serverlen);                      //first send one message of which command
+    sendto(sockfd, filename, 10, 0, &serveraddr, serverlen);                           //second message is sending filename information to server so it can create file
     numBytesSent = sendto(sockfd, fileBuffer, MAXFILESIZE, 0, &serveraddr, serverlen); //last message is contents of file
     if (numBytesSent < 0)
       error("ERROR in sendto");
 
+    //server response
     numBytesReceived = recvfrom(sockfd, serverResponse, MAXFILESIZE, 0, &serveraddr, &serverlen);
     if (numBytesReceived < 0)
       error("ERROR in recvfrom");
