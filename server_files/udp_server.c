@@ -34,6 +34,7 @@ int main(int argc, char **argv)
   struct sockaddr_in clientaddr;   /* client addr */
   struct hostent *hostp;           /* client host info */
   char receievedFile[MAXFILESIZE]; /* message buf */
+  char sendFileBuffer[MAXFILESIZE];
   char receivedCommand[10];
   char statusMessage[1000];
   char filename[10];
@@ -41,6 +42,8 @@ int main(int argc, char **argv)
   int optval;         /* flag value for setsockopt */
   int bytesReceieved; /* message byte size */
   int bytesSent;
+  int fileSize;
+  int removeStatus;
   FILE *transmitFile;
   size_t bytesWritten;
 
@@ -99,13 +102,14 @@ int main(int argc, char **argv)
 
   while (1)
   {
-
     /*
      * recvfrom: receive a UDP datagram from a client
      */
 
     bzero(receievedFile, MAXFILESIZE);
+
     bytesReceieved = recvfrom(sockfd, receivedCommand, 10, 0, (struct sockaddr *)&clientaddr, &clientlen); //receiving first message from client which is which command it's using
+
     if (bytesReceieved < 0)
       error("ERROR in recvfrom");
 
@@ -137,11 +141,9 @@ int main(int argc, char **argv)
       printf("Server received %d bytes\n", bytesReceieved);
       printf("Storing into file on server...\n");
 
-      // printf("Contents received: %s\n", receievedFile);
-      // return;
-
-      transmitFile = fopen(filename, "w+");
+      transmitFile = fopen(filename, "w+b");
       bytesWritten = fwrite(receievedFile, bytesReceieved, 1, transmitFile);
+      fclose(transmitFile);
 
       bzero(statusMessage, 50);
 
@@ -161,6 +163,62 @@ int main(int argc, char **argv)
                          (struct sockaddr *)&clientaddr, clientlen);
       if (bytesSent < 0)
         error("ERROR in sendto");
+    }
+
+    //GET
+    else if (strcmp(receivedCommand, "get") == 0)
+    {
+      printf("Command recieved: put\n");
+      bzero(filename, 10);
+      recvfrom(sockfd, filename, 10, 0, (struct sockaddr *)&clientaddr, &clientlen); //first receive to know what the name of the file wanted is
+
+      transmitFile = fopen(filename, "r");
+      if (!transmitFile)
+      {
+        printf("Unable to find or open file given.\n");
+        return 1;
+      }
+
+      fseek(transmitFile, 0L, SEEK_END);
+      fileSize = ftell(transmitFile);
+      fseek(transmitFile, 0, SEEK_SET);
+      printf("File size: %d\n", fileSize);
+
+      fread(sendFileBuffer, fileSize, 1, transmitFile);
+
+      fclose(transmitFile);
+
+      bytesSent = sendto(sockfd, sendFileBuffer, fileSize, 0, (struct sockaddr *)&clientaddr, clientlen);
+
+      if (bytesSent < 0)
+        error("ERROR in sendto");
+
+      printf("Bytes sent to client: %d\n", bytesSent);
+    }
+
+    else if (strcmp(receivedCommand, "delete") == 0)
+    {
+      printf("Command received: delete\n");
+      bzero(filename, 10);
+      recvfrom(sockfd, filename, 10, 0, (struct sockaddr *)&clientaddr, &clientlen); //first receive to know what the name of the file wanted is
+      printf("Filename: %s\n", filename);
+      removeStatus = remove(filename);
+      if (removeStatus == 0)
+      {
+        bzero(statusMessage, 1000);
+        strcpy(statusMessage, "File removed from server.");
+        bytesSent = sendto(sockfd, statusMessage, 50, 0,
+                           (struct sockaddr *)&clientaddr, clientlen);
+        printf("File successfully removed from server\n");
+      }
+      else
+      {
+        bzero(statusMessage, 1000);
+        strcpy(statusMessage, "Failed to remove file from server.");
+        bytesSent = sendto(sockfd, statusMessage, 50, 0,
+                           (struct sockaddr *)&clientaddr, clientlen);
+        printf("File unsuccessfully removed from server\n");
+      }
     }
     printf("\nWaiting for more messages from a client...\n");
   }

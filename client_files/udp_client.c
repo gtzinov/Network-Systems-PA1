@@ -16,6 +16,19 @@
 #define MAXFILESIZE 1024 * 25
 //25 used since largest file is 22kb
 
+/*
+------
+
+TO-DO: 
+-ls command
+-edge case handling with invalid commands, file names
+-review difference in sending something in sendto and recv parameters for server vs client
+-understand each function
+-look at assignment requirements for documentation
+
+------
+*/
+
 /* 
  * error - wrapper for perror
  */
@@ -38,11 +51,12 @@ int main(int argc, char **argv)
   char buf[BUFSIZE];
   char filename[FILENAMESIZE];
   char serverResponse[MAXFILESIZE];
+  char statusMessage[MAXFILESIZE];
   char fileBuffer[MAXFILESIZE];
   char commandBuffer[10];
   int removeStatus;
   FILE *transmitFile;
-
+  int bytesWritten;
   /* check command line arguments */
   if (argc != 3)
   {
@@ -95,19 +109,23 @@ int main(int argc, char **argv)
     if (!transmitFile)
     {
       printf("Unable to find or open file given.\n");
-      return;
+      return 1;
     }
 
-    // fseek(transmitFile, 0L, SEEK_END);
-    // fileSize = ftell(transmitFile);
-    // printf("File size: %d\n", fileSize);
-    fread(fileBuffer, MAXFILESIZE, 1, transmitFile);
+    fseek(transmitFile, 0L, SEEK_END);
+    fileSize = ftell(transmitFile);
+    fseek(transmitFile, 0, SEEK_SET);
+    printf("File size: %d\n", fileSize);
+
+    fread(fileBuffer, fileSize, 1, transmitFile);
+
+    fclose(transmitFile);
 
     //sending messages to server
     serverlen = sizeof(serveraddr);
-    sendto(sockfd, commandBuffer, 10, 0, &serveraddr, serverlen);                      //first send one message of which command
-    sendto(sockfd, filename, 10, 0, &serveraddr, serverlen);                           //second message is sending filename information to server so it can create file
-    numBytesSent = sendto(sockfd, fileBuffer, MAXFILESIZE, 0, &serveraddr, serverlen); //last message is contents of file
+    sendto(sockfd, commandBuffer, 10, 0, &serveraddr, serverlen);                   //first send one message of which command
+    sendto(sockfd, filename, 10, 0, &serveraddr, serverlen);                        //second message is sending filename information to server so it can create file
+    numBytesSent = sendto(sockfd, fileBuffer, fileSize, 0, &serveraddr, serverlen); //last message is contents of file
     if (numBytesSent < 0)
       error("ERROR in sendto");
 
@@ -131,17 +149,50 @@ int main(int argc, char **argv)
   //GET
   else if (strcmp(buf, "get\n") == 0)
   {
+    strcpy(commandBuffer, "get"); //to send in a message for server to know action
+
     printf("Which file would you like to get from the server?\n");
     fgets(filename, FILENAMESIZE, stdin);
-    //finish!
+    filename[strcspn(filename, "\n")] = 0;
+
+    serverlen = sizeof(serveraddr);
+    sendto(sockfd, commandBuffer, 10, 0, &serveraddr, serverlen);
+    sendto(sockfd, filename, 10, 0, &serveraddr, serverlen); // sending filename information to server so it can know which file to return
+
+    numBytesReceived = recvfrom(sockfd, serverResponse, MAXFILESIZE, 0, &serveraddr, &serverlen);
+
+    transmitFile = fopen(filename, "w+b");
+    bytesWritten = fwrite(serverResponse, numBytesReceived, 1, transmitFile);
+    fclose(transmitFile);
+
+    bzero(statusMessage, 50);
+
+    if (bytesWritten == 1)
+    {
+      printf("Success!\n");
+      strcpy(statusMessage, "Success");
+    }
+
+    else
+    {
+      strcpy(statusMessage, "Fail");
+    }
   }
 
   //DELETE
   else if (strcmp(buf, "delete\n") == 0)
   {
+    strcpy(commandBuffer, "delete"); //to send in a message for server to know action
+
     printf("Which file would you like to delete from the server?\n");
     fgets(filename, FILENAMESIZE, stdin);
-    //finish!
+    filename[strcspn(filename, "\n")] = 0;
+
+    serverlen = sizeof(serveraddr);
+    sendto(sockfd, commandBuffer, 10, 0, &serveraddr, serverlen);
+    sendto(sockfd, filename, 10, 0, &serveraddr, serverlen); // sending filename information to server so it can know which file to delete
+    recvfrom(sockfd, statusMessage, 1000, 0, &serveraddr, &serverlen);
+    printf("%s\n", statusMessage);
   }
 
   //LS
@@ -161,7 +212,7 @@ int main(int argc, char **argv)
   else
   {
     printf("Please enter valid command.\n");
-    return;
+    return 1;
   }
 
   /* print the server's reply */
