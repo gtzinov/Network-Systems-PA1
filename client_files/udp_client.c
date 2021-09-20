@@ -51,7 +51,7 @@ int main(int argc, char **argv)
   char buf[BUFSIZE];
   char filename[FILENAMESIZE];
   char serverResponse[MAXFILESIZE];
-  char statusMessage[MAXFILESIZE];
+  char statusMessage[100];
   char fileBuffer[MAXFILESIZE];
   char commandBuffer[10];
   int removeStatus;
@@ -198,8 +198,15 @@ int main(int argc, char **argv)
   //LS
   else if (strcmp(buf, "ls\n") == 0)
   {
-    printf("Here are all of the files on the server:");
-    //finish!
+    strcpy(commandBuffer, "ls"); //to send in a message for server to know action
+
+    printf("Here are all of the files on the server:\n");
+    serverlen = sizeof(serveraddr);
+
+    sendto(sockfd, commandBuffer, 10, 0, &serveraddr, serverlen);
+
+    recvfrom(sockfd, serverResponse, MAXFILESIZE, 0, &serveraddr, &serverlen);
+    printf("%s\n", serverResponse);
   }
 
   //EXIT

@@ -12,6 +12,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <dirent.h>
 
 #define MAXFILESIZE 1024 * 25
 //25 used since size of largest file is 25kb, 1024 bytes in 1kb
@@ -35,8 +36,9 @@ int main(int argc, char **argv)
   struct hostent *hostp;           /* client host info */
   char receievedFile[MAXFILESIZE]; /* message buf */
   char sendFileBuffer[MAXFILESIZE];
+  char lsContentsBuffer[MAXFILESIZE];
   char receivedCommand[10];
-  char statusMessage[1000];
+  char statusMessage[100];
   char filename[10];
   char *hostaddrp;    /* dotted decimal host addr string */
   int optval;         /* flag value for setsockopt */
@@ -113,9 +115,8 @@ int main(int argc, char **argv)
     if (bytesReceieved < 0)
       error("ERROR in recvfrom");
 
-    /* 
-     * gethostbyaddr: determine who sent the datagram
-     */
+    //gethostbyaddr: get information about client that send datagram, initially receive info from client in first recvfrom that fill out structs
+
     hostp = gethostbyaddr((const char *)&clientaddr.sin_addr.s_addr,
                           sizeof(clientaddr.sin_addr.s_addr), AF_INET);
     if (hostp == NULL)
@@ -124,21 +125,33 @@ int main(int argc, char **argv)
     if (hostaddrp == NULL)
       error("ERROR on inet_ntoa\n");
 
-    //!!!
+    //
+    //
+    //
+    //
+    //
+    //
+    //
     //handing of command-dependent response
+    //
+    //
+    //
+    //
+    //
+    //
+    //
+    //
 
     //PUT
     if (strcmp(receivedCommand, "put") == 0)
     {
 
       printf("Command recieved: put\n");
-      //receives
-      recvfrom(sockfd, filename, 10, 0, (struct sockaddr *)&clientaddr, &clientlen);                                //first receive to know what the name of the created file will be
+      recvfrom(sockfd, filename, 10, 0, (struct sockaddr *)&clientaddr, &clientlen);                                //first receive to know filename for created file
       bytesReceieved = recvfrom(sockfd, receievedFile, MAXFILESIZE, 0, (struct sockaddr *)&clientaddr, &clientlen); // second is receiving bytes of actual file
 
-      printf("Server received datagram from %s (%s)\n",
-             hostp->h_name, hostaddrp);
-      printf("Server received %d bytes\n", bytesReceieved);
+      printf("Server received datagram(s) from %s (%s), containing %d bytes\n",
+             hostp->h_name, hostaddrp, bytesReceieved);
       printf("Storing into file on server...\n");
 
       transmitFile = fopen(filename, "w+b");
@@ -196,16 +209,17 @@ int main(int argc, char **argv)
       printf("Bytes sent to client: %d\n", bytesSent);
     }
 
+    //DELETE
     else if (strcmp(receivedCommand, "delete") == 0)
     {
       printf("Command received: delete\n");
       bzero(filename, 10);
-      recvfrom(sockfd, filename, 10, 0, (struct sockaddr *)&clientaddr, &clientlen); //first receive to know what the name of the file wanted is
+      recvfrom(sockfd, filename, 10, 0, (struct sockaddr *)&clientaddr, &clientlen); //receive to know what the name of the file wanted is
       printf("Filename: %s\n", filename);
       removeStatus = remove(filename);
       if (removeStatus == 0)
       {
-        bzero(statusMessage, 1000);
+        bzero(statusMessage, 100);
         strcpy(statusMessage, "File removed from server.");
         bytesSent = sendto(sockfd, statusMessage, 50, 0,
                            (struct sockaddr *)&clientaddr, clientlen);
@@ -213,13 +227,39 @@ int main(int argc, char **argv)
       }
       else
       {
-        bzero(statusMessage, 1000);
-        strcpy(statusMessage, "Failed to remove file from server.");
-        bytesSent = sendto(sockfd, statusMessage, 50, 0,
+        bzero(statusMessage, 100);
+        strcpy(statusMessage, "Failed to remove file from server. Either file does not exist or it is not the correct filename");
+        bytesSent = sendto(sockfd, statusMessage, strlen(statusMessage), 0,
                            (struct sockaddr *)&clientaddr, clientlen);
-        printf("File unsuccessfully removed from server\n");
+        printf("%s\n", statusMessage);
       }
     }
+
+    //LS
+    else if (strcmp(receivedCommand, "ls") == 0)
+    {
+      printf("Command recieved: ls\n");
+      printf("Printing all files on server:\n");
+
+      //need <dirent.h> headr for looking into current directory
+      struct dirent *directoryEntry;
+      DIR *dr = opendir(".");
+      if (dr == NULL)
+      {
+        printf("Error: Cannot open current directory\n");
+        return 1;
+      }
+      while ((directoryEntry = readdir(dr)) != NULL)
+      {
+        sprintf(lsContentsBuffer + strlen(lsContentsBuffer), "%s", directoryEntry->d_name);
+        sprintf(lsContentsBuffer + strlen(lsContentsBuffer), "\n");
+      }
+
+      closedir(dr);
+    }
+
+    sendto(sockfd, lsContentsBuffer, strlen(lsContentsBuffer), 0, (struct sockaddr *)&clientaddr, clientlen);
+    bzero(lsContentsBuffer, strlen(lsContentsBuffer));
     printf("\nWaiting for more messages from a client...\n");
   }
 }
