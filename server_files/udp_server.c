@@ -155,12 +155,12 @@ int main(int argc, char **argv)
       printf("Storing into file on server...\n");
 
       transmitFile = fopen(filename, "w+b");
-      bytesWritten = fwrite(receievedFile, bytesReceieved, 1, transmitFile);
+      bytesWritten = fwrite(receievedFile, bytesReceieved, 1, transmitFile); //bytes written is really elements written
       fclose(transmitFile);
 
       bzero(statusMessage, 50);
 
-      if (bytesWritten == 1)
+      if (bytesWritten == 1) //elements written is indeed 1
       {
         printf("Success!\n");
         strcpy(statusMessage, "Success");
@@ -181,7 +181,7 @@ int main(int argc, char **argv)
     //GET
     else if (strcmp(receivedCommand, "get") == 0)
     {
-      printf("Command recieved: put\n");
+      printf("Command recieved: get\n");
       bzero(filename, 10);
       recvfrom(sockfd, filename, 10, 0, (struct sockaddr *)&clientaddr, &clientlen); //first receive to know what the name of the file wanted is
 
@@ -189,17 +189,23 @@ int main(int argc, char **argv)
       if (!transmitFile)
       {
         printf("Unable to find or open file given.\n");
+        sendto(sockfd, statusMessage, 1, 0, (struct sockaddr *)&clientaddr, clientlen);
         return 1;
       }
 
       fseek(transmitFile, 0L, SEEK_END);
       fileSize = ftell(transmitFile);
       fseek(transmitFile, 0, SEEK_SET);
-      printf("File size: %d\n", fileSize);
+      // printf("File size: %d\n", fileSize);
 
       fread(sendFileBuffer, fileSize, 1, transmitFile);
 
       fclose(transmitFile);
+
+      /*
+      process: get filename of the file on the server the client wants, make sure the file is located here, get bytes into a buffer, get num bytes of file with fseek and ftell, send exactly that 
+      much back to user. 
+      */
 
       bytesSent = sendto(sockfd, sendFileBuffer, fileSize, 0, (struct sockaddr *)&clientaddr, clientlen);
 
@@ -217,6 +223,7 @@ int main(int argc, char **argv)
       recvfrom(sockfd, filename, 10, 0, (struct sockaddr *)&clientaddr, &clientlen); //receive to know what the name of the file wanted is
       printf("Filename: %s\n", filename);
       removeStatus = remove(filename);
+      //handle whether removing was successful or not
       if (removeStatus == 0)
       {
         bzero(statusMessage, 100);
@@ -257,6 +264,10 @@ int main(int argc, char **argv)
 
       closedir(dr);
     }
+
+      /*
+    using library for handling of viewing files in directory, get list of this and append to the buffer we'll send back to the user.
+    */
 
     sendto(sockfd, lsContentsBuffer, strlen(lsContentsBuffer), 0, (struct sockaddr *)&clientaddr, clientlen);
     bzero(lsContentsBuffer, strlen(lsContentsBuffer));

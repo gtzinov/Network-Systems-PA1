@@ -115,11 +115,15 @@ int main(int argc, char **argv)
     fseek(transmitFile, 0L, SEEK_END);
     fileSize = ftell(transmitFile);
     fseek(transmitFile, 0, SEEK_SET);
-    printf("File size: %d\n", fileSize);
+    // printf("File size: %d\n", fileSize);
 
     fread(fileBuffer, fileSize, 1, transmitFile);
 
     fclose(transmitFile);
+
+    //open file you want to send, write bytes into buffer, then send buffer.
+    //since we're not worrying about packet loss, can just send it one big buffer.
+    //otherwise would be more ideal to send into smaller packets for reliability, so that if we need to resend a packet it doesn't have to be massive packet
 
     //sending messages to server
     serverlen = sizeof(serveraddr);
@@ -156,14 +160,22 @@ int main(int argc, char **argv)
     filename[strcspn(filename, "\n")] = 0;
 
     serverlen = sizeof(serveraddr);
-    sendto(sockfd, commandBuffer, 10, 0, &serveraddr, serverlen);
-    sendto(sockfd, filename, 10, 0, &serveraddr, serverlen); // sending filename information to server so it can know which file to return
+    sendto(sockfd, commandBuffer, 10, 0, &serveraddr, serverlen); //sending command type
+    sendto(sockfd, filename, 10, 0, &serveraddr, serverlen);      // sending filename information to server so it can know which file to return
 
     numBytesReceived = recvfrom(sockfd, serverResponse, MAXFILESIZE, 0, &serveraddr, &serverlen);
+
+    if (numBytesReceived == 1)
+    {
+      //created system on both ends to detect when file doesn't exist on server: server just sends one byte back and client knows how to detect and read this
+      printf("File not found on server\n");
+      return 1;
+    }
 
     transmitFile = fopen(filename, "w+b");
     bytesWritten = fwrite(serverResponse, numBytesReceived, 1, transmitFile);
     fclose(transmitFile);
+    //received bytes, write into file on local side
 
     bzero(statusMessage, 50);
 
@@ -193,6 +205,8 @@ int main(int argc, char **argv)
     sendto(sockfd, filename, 10, 0, &serveraddr, serverlen); // sending filename information to server so it can know which file to delete
     recvfrom(sockfd, statusMessage, 1000, 0, &serveraddr, &serverlen);
     printf("%s\n", statusMessage);
+
+    //simpler, just send file name, and recieve succcess status from server
   }
 
   //LS
@@ -213,12 +227,11 @@ int main(int argc, char **argv)
   else if (strcmp(buf, "exit\n") == 0)
   {
     printf("Exiting program\n");
-    //finish!
   }
 
   else
   {
-    printf("Please enter valid command.\n");
+    printf("\nPlease enter valid command. \n(NOTE: I broke up `put <filename>` into put, send command, then filename, so that there's less room for error with two separate commands and for it to be a more hierarchical/interactive program)\n");
     return 1;
   }
 
